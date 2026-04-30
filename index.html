@@ -29,12 +29,53 @@
       canvas {
         display: block;
       }
+      #pickBtn {
+        position: fixed;
+        bottom: 36px;
+        left: 50%;
+        transform: translateX(-50%);
+        padding: 14px 44px;
+        font-size: 15px;
+        font-weight: 800;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: #1a120a;
+        background: linear-gradient(180deg, #fde68a 0%, #f59e0b 100%);
+        border: 1px solid #fbbf24;
+        border-radius: 10px;
+        cursor: pointer;
+        z-index: 10;
+        box-shadow:
+          0 0 28px rgba(251, 191, 36, 0.55),
+          0 6px 0 #92400e,
+          inset 0 1px 0 rgba(255, 255, 255, 0.5);
+        transition: transform 0.06s ease, box-shadow 0.18s ease;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      #pickBtn:hover:not(:disabled) {
+        box-shadow:
+          0 0 36px rgba(251, 191, 36, 0.8),
+          0 6px 0 #92400e,
+          inset 0 1px 0 rgba(255, 255, 255, 0.55);
+      }
+      #pickBtn:active:not(:disabled) {
+        transform: translateX(-50%) translateY(3px);
+        box-shadow:
+          0 0 24px rgba(251, 191, 36, 0.5),
+          0 3px 0 #92400e,
+          inset 0 1px 0 rgba(255, 255, 255, 0.4);
+      }
+      #pickBtn:disabled {
+        opacity: 0.42;
+        cursor: not-allowed;
+      }
     </style>
   </head>
   <body>
     <div id="app">
       <canvas id="carousel"></canvas>
     </div>
+    <button id="pickBtn">PICK</button>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

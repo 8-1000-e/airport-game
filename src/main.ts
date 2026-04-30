@@ -8,7 +8,16 @@ import {
   FLASH_DURATION_MS,
   makeArrowState,
 } from "./arrows";
-
+import {
+  ClawTargets,
+  drawClaw,
+  drawDeliveryBox,
+  getPickPosition,
+  makeClawState,
+  triggerPick,
+  updateClaw,
+} from "./claw";
+import { drawBackground } from "./background";
 const canvas = document.getElementById("carousel") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d")!;
 
@@ -190,6 +199,9 @@ interface Luggage {
 }
 
 const luggage: Luggage[] = [];
+// Bags that have been delivered into the drop box. Stored separately so they
+// don't keep cycling on the carousel but remain visible in the box.
+const boxedLuggage: Luggage[] = [];
 const COUNT = 18;
 const MULTIPLIERS = [
   0.6, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.5, 1.7,
@@ -459,19 +471,25 @@ function drawBriefcase(s: number, color: string) {
   ctx.globalAlpha = 1;
 }
 
-function drawLuggage(lug: Luggage, cx: number, cy: number) {
-  const { x, y, angle } = stadiumPath(lug.t, cx, cy);
+/** Render just the bag body at a given world position with rotation. */
+function drawLuggageBody(
+  lug: Luggage,
+  x: number,
+  y: number,
+  angle: number,
+  withShadow = true,
+) {
   const s = lug.size;
-
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(angle);
 
-  // Drop shadow under bag
-  ctx.fillStyle = "rgba(0, 0, 0, 0.45)";
-  ctx.beginPath();
-  ctx.ellipse(0, s * 0.5, s * 0.55, s * 0.12, 0, 0, Math.PI * 2);
-  ctx.fill();
+  if (withShadow) {
+    ctx.fillStyle = "rgba(0, 0, 0, 0.45)";
+    ctx.beginPath();
+    ctx.ellipse(0, s * 0.5, s * 0.55, s * 0.12, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
   switch (lug.type) {
     case "hard": drawHardCase(s, lug.color); break;
@@ -481,6 +499,11 @@ function drawLuggage(lug: Luggage, cx: number, cy: number) {
   }
 
   ctx.restore();
+}
+
+function drawLuggage(lug: Luggage, cx: number, cy: number) {
+  const { x, y, angle } = stadiumPath(lug.t, cx, cy);
+  drawLuggageBody(lug, x, y, angle);
 
   // Points label — placed along the OUTWARD NORMAL of the path so it follows
   // luggage cleanly through the curves.
@@ -502,7 +525,6 @@ function drawLuggage(lug: Luggage, cx: number, cy: number) {
   ctx.textBaseline = "middle";
   ctx.font = "900 14px ui-monospace, SFMono-Regular, Menlo, monospace";
 
-  // Top 3 → soft breathing glow underneath, no scale, no ring, no rays.
   if (isTop3) {
     const breathe = 0.5 + 0.5 * Math.sin((Date.now() / 900) * Math.PI * 2);
     const auraR = 16 + breathe * 3;
@@ -515,19 +537,16 @@ function drawLuggage(lug: Luggage, cx: number, cy: number) {
     ctx.fill();
   }
 
-  // Dark stroke for legibility
   ctx.lineWidth = 4;
   ctx.lineJoin = "round";
   ctx.strokeStyle = "rgba(0,0,0,0.85)";
   ctx.strokeText(text, tx, ty);
 
-  // Glow (a touch stronger for top3)
   ctx.shadowColor = GLOW_COLOR;
   ctx.shadowBlur = isTop3 ? 14 : 8;
   ctx.fillStyle = POINT_COLOR;
   ctx.fillText(text, tx, ty);
 
-  // Crisp top layer
   ctx.shadowBlur = 0;
   ctx.fillText(text, tx, ty);
 
@@ -620,6 +639,60 @@ function updateDirectionLerp(dt: number) {
   }
 }
 
+// ─── Claw state ────────────────────────────────────────────────────────────
+const clawState = makeClawState();
+
+function getClawTargets(cx: number, cy: number): ClawTargets {
+  const rOuter = TRACK.radius + TRACK.trackWidth / 2;
+  // Pivot sits well to the right of the carousel; the arm sweeps inward to
+  // grab a bag at the rightmost belt point, then rotates 90° downward to drop
+  // into the box.
+  return {
+    pivot: { x: cx + TRACK.straight / 2 + rOuter + 80, y: cy },
+    armLength: 93,
+    bagAttachDist: 32,
+    idleAngle: Math.PI,        // pointing left toward the carousel
+    dropAngle: Math.PI / 2,    // pointing down toward the drop box
+  };
+}
+
+// Bag must be physically within this distance of the claw's pickup spot to be
+// picked. Prevents grabbing a far-away bag when spamming the button.
+const PICK_RANGE_PX = 45;
+
+function findClosestBagInRange(
+  pickPos: { x: number; y: number },
+  cx: number,
+  cy: number,
+): number {
+  let best = -1;
+  let bestDist = Infinity;
+  for (let i = 0; i < luggage.length; i++) {
+    const { x, y } = stadiumPath(luggage[i].t, cx, cy);
+    const dx = x - pickPos.x;
+    const dy = y - pickPos.y;
+    const d2 = dx * dx + dy * dy;
+    if (d2 < bestDist) {
+      bestDist = d2;
+      best = i;
+    }
+  }
+  if (Math.sqrt(bestDist) > PICK_RANGE_PX) return -1;
+  return best;
+}
+
+const pickBtn = document.getElementById("pickBtn") as HTMLButtonElement;
+pickBtn.addEventListener("click", () => {
+  if (clawState.phase !== "idle") return;
+  const cx = window.innerWidth / 2;
+  const cy = window.innerHeight / 2;
+  const targets = getClawTargets(cx, cy);
+  const pickPos = getPickPosition(targets);
+  const bagId = findClosestBagInRange(pickPos, cx, cy);
+  if (bagId < 0) return; // no bag in front of the claw
+  triggerPick(clawState, performance.now(), bagId);
+});
+
 // ─── Animate ────────────────────────────────────────────────────────────────
 let last = performance.now();
 let beltT = 0; // belt phase, advances at the same rate as the luggage
@@ -632,6 +705,15 @@ function frame(now: number) {
 
   const cx = width / 2;
   const cy = height / 2;
+
+  // Animated airport-floor background (tiles, walkers, dust, chairs)
+  const rOuterFull = TRACK.radius + TRACK.trackWidth / 2 + 10;
+  drawBackground(ctx, width, height, dt, now, {
+    cx,
+    cy,
+    halfW: TRACK.straight / 2 + rOuterFull,
+    halfH: rOuterFull,
+  });
 
   // Price-driven charge updates
   const price = feed.current();
@@ -680,10 +762,58 @@ function frame(now: number) {
     directionTarget,
   );
 
-  for (const lug of luggage) {
+  // ─── Claw + delivery box ────────────────────────────────────────────────
+  const clawTargets = getClawTargets(cx, cy);
+  const prevGrabbedId = clawState.grabbedBagId;
+  const clawRender = updateClaw(clawState, now, clawTargets);
+
+  // The claw clears grabbedBagId at the end of the "dropping" phase. Move
+  // the bag from the carousel into the box's static collection.
+  if (prevGrabbedId !== null && clawState.grabbedBagId === null) {
+    const delivered = luggage.splice(prevGrabbedId, 1)[0];
+    boxedLuggage.push(delivered);
+  }
+
+  // Disable button while busy
+  pickBtn.disabled = clawState.phase !== "idle";
+
+  // Delivery box centered exactly on where the claw drops the bag — when the
+  // arm swings to its drop angle, the bagPos lands in the middle of the box.
+  const dropArmEndX =
+    clawTargets.pivot.x + Math.cos(clawTargets.dropAngle) * clawTargets.armLength;
+  const dropArmEndY =
+    clawTargets.pivot.y + Math.sin(clawTargets.dropAngle) * clawTargets.armLength;
+  const dropBagX =
+    dropArmEndX + Math.cos(clawTargets.dropAngle) * clawTargets.bagAttachDist;
+  const dropBagY =
+    dropArmEndY + Math.sin(clawTargets.dropAngle) * clawTargets.bagAttachDist;
+  drawDeliveryBox(ctx, dropBagX, dropBagY);
+
+  // Bags already delivered — sit inside the box, scaled down so they fit.
+  // Rendered in oldest-first order so the newest stacks on top.
+  const BOXED_SCALE = 0.6;
+  for (let i = 0; i < boxedLuggage.length; i++) {
+    const lug = boxedLuggage[i];
+    const origSize = lug.size;
+    lug.size = origSize * BOXED_SCALE;
+    // Slight upward stack offset so multiple deliveries are visible
+    drawLuggageBody(lug, dropBagX, dropBagY - i * 3, 0);
+    lug.size = origSize;
+  }
+
+  for (let i = 0; i < luggage.length; i++) {
+    const lug = luggage[i];
+    if (i === clawState.grabbedBagId) {
+      // Bag is locked to the claw — render at the claw's bagPos.
+      // No shadow — bag is in the air, the floating shadow looked broken.
+      drawLuggageBody(lug, clawRender.bagPos.x, clawRender.bagPos.y, 0, false);
+      continue;
+    }
     lug.t = (lug.t + lug.speed * dt * directionCurrent + 1) % 1;
     drawLuggage(lug, cx, cy);
   }
+
+  drawClaw(ctx, clawRender);
 
   requestAnimationFrame(frame);
 }
