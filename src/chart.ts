@@ -15,6 +15,13 @@ export interface ChartData {
   price: number | null;
   history: PricePoint[];
   open?: number | null;
+  /**
+   * Carousel direction (+1 or -1). Used to colorize the chart so it always
+   * matches the active chevron set:
+   *   -1 → cyan (up chevrons active)
+   *    1 → magenta (down chevrons active)
+   */
+  direction?: number;
 }
 
 function clipStadium(
@@ -52,7 +59,7 @@ export function drawPriceChart(
   // ALL chart drawing is clipped to the stadium so it fills the oval shape.
   // A small leftward shift keeps the line / current-price dot away from the
   // narrow right tip where the carousel curve would otherwise visually clip them.
-  const SHIFT_LEFT = 290;
+  const SHIFT_LEFT = 150;
   ctx.save();
   clipStadium(ctx, cx, cy, halfS, rInner);
   ctx.translate(-SHIFT_LEFT, 0);
@@ -86,22 +93,6 @@ export function drawPriceChart(
   const plotBottom = stadiumBottom - stadiumH * VERTICAL_INSET_RATIO;
   const plotH = plotBottom - plotTop;
 
-  // ─── Header (SOL/USD + big price) ─────────────────────────────────────────
-  // Positioned in the upper-left "safe" zone — inside the straight section,
-  // never in the curved end.
-  const headerX = cx - halfS + 16;
-  ctx.fillStyle = "#9ca3af";
-  ctx.font = "bold 13px -apple-system, sans-serif";
-  ctx.textAlign = "left";
-  ctx.textBaseline = "top";
-  ctx.fillText("SOL / USD", headerX, stadiumTop + 18);
-
-  if (price !== null) {
-    ctx.fillStyle = "#fff";
-    ctx.font = "bold 28px -apple-system, sans-serif";
-    ctx.fillText(price.toFixed(2), headerX, stadiumTop + 36);
-  }
-
   if (!range || pts.length < 2) {
     if (price === null) {
       ctx.fillStyle = "#6b7280";
@@ -134,12 +125,13 @@ export function drawPriceChart(
     ctx.stroke();
   }
 
-  // ─── Trend color ──────────────────────────────────────────────────────────
-  const first = pts[0].price;
-  const lastP = pts[pts.length - 1].price;
-  const goingUp = lastP >= first;
-  const lineColor = goingUp ? "#22c55e" : "#ef4444";
-  const fillRgb = goingUp ? "rgba(34, 197, 94, " : "rgba(239, 68, 68, ";
+  // ─── Color follows the active carousel direction (chevron set) ───────────
+  // Using a price-based trend window made the chart disagree with the active
+  // chevrons (e.g. magenta chart while cyan chevrons were running). Tying it
+  // straight to `direction` keeps everything visually consistent.
+  const goingUp = data.direction === -1; // -1 → up chevrons active → cyan
+  const lineColor = goingUp ? "#22d3ee" : "#ec4899";
+  const fillRgb = goingUp ? "rgba(34, 211, 238, " : "rgba(236, 72, 153, ";
 
   // ─── Gradient fill under curve ────────────────────────────────────────────
   const grad = ctx.createLinearGradient(0, plotTop, 0, plotBottom);

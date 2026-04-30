@@ -2,6 +2,12 @@
 
 import { startPriceFeed } from "./priceFeed";
 import { drawPriceChart } from "./chart";
+import {
+  ArrowState,
+  drawDirectionArrows,
+  FLASH_DURATION_MS,
+  makeArrowState,
+} from "./arrows";
 
 const canvas = document.getElementById("carousel") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d")!;
@@ -184,8 +190,11 @@ interface Luggage {
 }
 
 const luggage: Luggage[] = [];
-const COUNT = 10;
-const MULTIPLIERS = [0.6, 0.8, 0.9, 1.2, 1.5, 1.8, 2.0, 2.5, 3.0, 3.5];
+const COUNT = 18;
+const MULTIPLIERS = [
+  0.6, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.5, 1.7,
+  1.8, 2.0, 2.2, 2.5, 2.7, 3.0, 3.2, 3.5, 4.0,
+];
 const TYPES: BagType[] = ["hard", "duffle", "backpack", "briefcase"];
 
 for (let i = 0; i < COUNT; i++) {
@@ -487,6 +496,92 @@ function drawLuggage(lug: Luggage, cx: number, cy: number) {
   ctx.restore();
 }
 
+// ─── Direction state ───────────────────────────────────────────────────────
+// Two charge bars (up / down). A consistent run of upticks fills the up arrow;
+// downticks fill the down arrow. The opposite tick partially drains. When
+// either reaches 1, that arrow's flash plays and the carousel target direction
+// is set. A reversal mid-charge cancels the trigger because the charge is
+// drained back below 1 before it ever reaches threshold.
+const arrowState: ArrowState = makeArrowState();
+const CHARGE_STEP = 1.0;         // 1 valid tick → instant trigger
+const COUNTER_STEP = 1.0;        // 1 opposite tick wipes any pending charge
+const IDLE_DRAIN_PER_SEC = 0.04; // very slow drain when nothing happens
+let lastObservedPrice: number | null = null;
+
+let directionTarget = 1;  // +1 forward, -1 reversed
+let directionCurrent = 1; // smoothed; carousel speed = base * directionCurrent
+const DIR_LERP_PER_SEC = 3.5;
+
+// Ignore micro price moves. Below this fraction of price the change is treated
+// as noise — neither charging nor discharging happens, and lastObservedPrice
+// is NOT updated, so accumulated micro-moves can still cross the threshold.
+const NOISE_FLOOR_RATIO = 0.0000005; // ~0.00005% of price — basically any non-zero tick triggers
+
+function isAnyFlashing(now: number): boolean {
+  return (
+    now - arrowState.flashUpStart < FLASH_DURATION_MS ||
+    now - arrowState.flashDownStart < FLASH_DURATION_MS
+  );
+}
+
+function onPriceTick(p: number, now: number) {
+  if (lastObservedPrice === null) {
+    lastObservedPrice = p;
+    return;
+  }
+  // While any flash plays, freeze charges so we don't end up with both
+  // directions visually lit at once. Still track lastObservedPrice so the next
+  // post-flash tick is compared against a fresh reference.
+  if (isAnyFlashing(now)) {
+    lastObservedPrice = p;
+    return;
+  }
+  const delta = p - lastObservedPrice;
+  const noiseFloor = (lastObservedPrice || 80) * NOISE_FLOOR_RATIO;
+  if (Math.abs(delta) < noiseFloor) return; // ignore noise — no discharge
+
+  // Mapping (after swap): up-arrow trigger sets directionTarget = -1,
+  // down-arrow trigger sets directionTarget = +1.
+  if (delta > 0) {
+    arrowState.chargeDown = Math.max(0, arrowState.chargeDown - COUNTER_STEP);
+    if (directionTarget !== -1) {
+      arrowState.chargeUp = Math.min(1, arrowState.chargeUp + CHARGE_STEP);
+    }
+  } else {
+    arrowState.chargeUp = Math.max(0, arrowState.chargeUp - COUNTER_STEP);
+    if (directionTarget !== 1) {
+      arrowState.chargeDown = Math.min(1, arrowState.chargeDown + CHARGE_STEP);
+    }
+  }
+  lastObservedPrice = p;
+}
+
+function checkTriggers(now: number) {
+  // Only one flash at a time — wait for any active flash to finish before
+  // firing a new trigger.
+  if (isAnyFlashing(now)) return;
+  if (arrowState.chargeUp >= 1) {
+    arrowState.flashUpStart = now;
+    arrowState.chargeUp = 0;
+    arrowState.chargeDown = 0;
+    directionTarget = -1;
+  } else if (arrowState.chargeDown >= 1) {
+    arrowState.flashDownStart = now;
+    arrowState.chargeUp = 0;
+    arrowState.chargeDown = 0;
+    directionTarget = 1;
+  }
+}
+
+function updateDirectionLerp(dt: number) {
+  const step = DIR_LERP_PER_SEC * dt;
+  if (directionCurrent < directionTarget) {
+    directionCurrent = Math.min(directionTarget, directionCurrent + step);
+  } else if (directionCurrent > directionTarget) {
+    directionCurrent = Math.max(directionTarget, directionCurrent - step);
+  }
+}
+
 // ─── Animate ────────────────────────────────────────────────────────────────
 let last = performance.now();
 let beltT = 0; // belt phase, advances at the same rate as the luggage
@@ -500,13 +595,21 @@ function frame(now: number) {
   const cx = width / 2;
   const cy = height / 2;
 
+  // Price-driven charge updates
+  const price = feed.current();
+  if (price !== null) onPriceTick(price, now);
+  checkTriggers(now);
+  // Idle drain so charges decay if no price activity
+  arrowState.chargeUp = Math.max(0, arrowState.chargeUp - IDLE_DRAIN_PER_SEC * dt);
+  arrowState.chargeDown = Math.max(0, arrowState.chargeDown - IDLE_DRAIN_PER_SEC * dt);
+  updateDirectionLerp(dt);
+
   // Advance belt at the luggage cruise speed so slats move with the bags.
-  beltT = (beltT + 0.04 * dt) % 1;
+  beltT = (beltT + 0.04 * dt * directionCurrent + 1) % 1;
 
   drawTrack(cx, cy, beltT);
 
   // Price chart fills the entire inner stadium platform (oval shape).
-  const price = feed.current();
   if (openPrice === null && price !== null) openPrice = price;
   const rInner = TRACK.radius - TRACK.trackWidth / 2 - 4;
   drawPriceChart(
@@ -521,11 +624,26 @@ function frame(now: number) {
       price,
       history: feed.history(),
       open: openPrice,
+      direction: directionTarget,
     },
   );
 
+  // Direction arrows — placed in the right portion of the inner stadium.
+  // Chevrons follow the curved right edge of the inner stadium.
+  drawDirectionArrows(
+    ctx,
+    {
+      cx: cx + TRACK.straight / 2,
+      cy: cy,
+      radius: rInner * 0.78,
+    },
+    arrowState,
+    now,
+    directionTarget,
+  );
+
   for (const lug of luggage) {
-    lug.t = (lug.t + lug.speed * dt) % 1;
+    lug.t = (lug.t + lug.speed * dt * directionCurrent + 1) % 1;
     drawLuggage(lug, cx, cy);
   }
 
