@@ -195,6 +195,8 @@ const MULTIPLIERS = [
   0.6, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.5, 1.7,
   1.8, 2.0, 2.2, 2.5, 2.7, 3.0, 3.2, 3.5, 4.0,
 ];
+// Threshold for "main subject" treatment — top 3 values get extra FX
+const TOP3_THRESHOLD = [...MULTIPLIERS].sort((a, b) => b - a)[2];
 const TYPES: BagType[] = ["hard", "duffle", "backpack", "briefcase"];
 
 for (let i = 0; i < COUNT; i++) {
@@ -480,19 +482,55 @@ function drawLuggage(lug: Luggage, cx: number, cy: number) {
 
   ctx.restore();
 
-  // Multiplier label (upright, outside the track)
+  // Points label — placed along the OUTWARD NORMAL of the path so it follows
+  // luggage cleanly through the curves.
+  const points = Math.round(lug.multiplier * 100);
+  const isTop3 = lug.multiplier >= TOP3_THRESHOLD;
+  const nx = Math.sin(angle);
+  const ny = -Math.cos(angle);
+  const labelOffset = TRACK.trackWidth * 0.55 + 22;
+  const tx = x + nx * labelOffset;
+  const ty = y + ny * labelOffset;
+  const text = `${points}`;
+
+  // Gold palette
+  const POINT_COLOR = isTop3 ? "#fef3c7" : "#fde68a";
+  const GLOW_COLOR = "#fbbf24";
+
   ctx.save();
-  ctx.fillStyle = "#fff";
-  ctx.font = "bold 14px -apple-system, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  const dx = x - cx;
-  const dy = y - cy;
-  const dist = Math.hypot(dx, dy) || 1;
-  const labelOffset = TRACK.trackWidth * 0.55 + 18;
-  const tx = x + (dx / dist) * labelOffset;
-  const ty = y + (dy / dist) * labelOffset;
-  ctx.fillText(`${lug.multiplier}x`, tx, ty);
+  ctx.font = "900 14px ui-monospace, SFMono-Regular, Menlo, monospace";
+
+  // Top 3 → soft breathing glow underneath, no scale, no ring, no rays.
+  if (isTop3) {
+    const breathe = 0.5 + 0.5 * Math.sin((Date.now() / 900) * Math.PI * 2);
+    const auraR = 16 + breathe * 3;
+    const grad = ctx.createRadialGradient(tx, ty, 0, tx, ty, auraR);
+    grad.addColorStop(0, `rgba(251, 191, 36, ${0.35 + breathe * 0.2})`);
+    grad.addColorStop(1, "rgba(251, 191, 36, 0)");
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(tx, ty, auraR, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Dark stroke for legibility
+  ctx.lineWidth = 4;
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = "rgba(0,0,0,0.85)";
+  ctx.strokeText(text, tx, ty);
+
+  // Glow (a touch stronger for top3)
+  ctx.shadowColor = GLOW_COLOR;
+  ctx.shadowBlur = isTop3 ? 14 : 8;
+  ctx.fillStyle = POINT_COLOR;
+  ctx.fillText(text, tx, ty);
+
+  // Crisp top layer
+  ctx.shadowBlur = 0;
+  ctx.fillText(text, tx, ty);
+
   ctx.restore();
 }
 
@@ -515,7 +553,7 @@ const DIR_LERP_PER_SEC = 3.5;
 // Ignore micro price moves. Below this fraction of price the change is treated
 // as noise — neither charging nor discharging happens, and lastObservedPrice
 // is NOT updated, so accumulated micro-moves can still cross the threshold.
-const NOISE_FLOOR_RATIO = 0.0000005; // ~0.00005% of price — basically any non-zero tick triggers
+const NOISE_FLOOR_RATIO = 0.00000005; // ~0.00005% of price — basically any non-zero tick triggers
 
 function isAnyFlashing(now: number): boolean {
   return (

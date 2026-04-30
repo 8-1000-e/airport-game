@@ -2,7 +2,7 @@ import type { PricePoint } from "./priceFeed";
 
 const HISTORY_WINDOW_MS = 60_000;
 const RANGE_PADDING = 0.00000005;
-const VERTICAL_INSET_RATIO = 0.14;
+const VERTICAL_INSET_RATIO = 0.12;
 
 export interface StadiumArea {
   cx: number;
@@ -83,7 +83,9 @@ export function drawPriceChart(
     if (price !== null) prices.push(price);
     const min = Math.min(...prices);
     const max = Math.max(...prices);
-    const pad = Math.max((max - min) * 0.001, (min || 80) * RANGE_PADDING);
+    // Tighten pad: visual range is essentially [min, max] so the slightest
+    // price movement uses the full vertical space.
+    const pad = Math.max((max - min) * 0.0001, (min || 80) * RANGE_PADDING);
     range = { min: min - pad, max: max + pad };
   }
 
