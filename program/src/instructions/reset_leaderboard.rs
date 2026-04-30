@@ -7,19 +7,18 @@ use crate::state::*;
 /// called between matches (after the previous distribute_prize and before
 /// the next batch of pick_luggage calls).
 pub fn reset_leaderboard(ctx: Context<ResetLeaderboard>) -> Result<()> {
-    let lobby = &ctx.accounts.lobby;
-    // We allow reset whether the lobby has already been reset to OPEN or is
-    // still SETTLED — both are valid moments. The only state that's wrong is
-    // STARTED (a match is in progress).
-    require!(lobby.status != STATUS_STARTED, LobbyError::LobbyNotSettled);
-    require_keys_eq!(
-        ctx.accounts.authority.key(),
-        lobby.authority,
-        LobbyError::Unauthorized
-    );
+    {
+        let lobby = ctx.accounts.lobby.load()?;
+        require!(lobby.status != STATUS_STARTED, LobbyError::LobbyNotSettled);
+        require_keys_eq!(
+            ctx.accounts.authority.key(),
+            lobby.authority,
+            LobbyError::Unauthorized
+        );
+    }
 
-    let leaderboard = &mut ctx.accounts.leaderboard;
-    leaderboard.finalized = false;
+    let mut leaderboard = ctx.accounts.leaderboard.load_mut()?;
+    leaderboard.finalized = 0;
     leaderboard.entry_count = 0;
     leaderboard.entries = [LeaderboardEntry::default(); MAX_PLAYERS];
 
@@ -30,16 +29,16 @@ pub fn reset_leaderboard(ctx: Context<ResetLeaderboard>) -> Result<()> {
 pub struct ResetLeaderboard<'info> {
     #[account(
         seeds = [LOBBY_SEED],
-        bump = lobby.bump,
+        bump = lobby.load()?.bump,
     )]
-    pub lobby: Account<'info, Lobby>,
+    pub lobby: AccountLoader<'info, Lobby>,
 
     #[account(
         mut,
         seeds = [LEADERBOARD_SEED, lobby.key().as_ref()],
-        bump = leaderboard.bump,
+        bump = leaderboard.load()?.bump,
     )]
-    pub leaderboard: Account<'info, Leaderboard>,
+    pub leaderboard: AccountLoader<'info, Leaderboard>,
 
     pub authority: Signer<'info>,
 }

@@ -4,7 +4,7 @@ use crate::errors::*;
 use crate::state::*;
 
 pub fn start_match(ctx: Context<StartMatch>) -> Result<()> {
-    let lobby = &mut ctx.accounts.lobby;
+    let mut lobby = ctx.accounts.lobby.load_mut()?;
 
     require!(lobby.status == STATUS_OPEN, LobbyError::LobbyNotOpen);
     require_keys_eq!(
@@ -26,10 +26,9 @@ pub struct StartMatch<'info> {
     #[account(
         mut,
         seeds = [LOBBY_SEED],
-        bump = lobby.bump,
+        bump = lobby.load()?.bump,
     )]
-    pub lobby: Account<'info, Lobby>,
+    pub lobby: AccountLoader<'info, Lobby>,
 
-    /// Must match lobby.authority — enforced in the handler.
     pub authority: Signer<'info>,
 }

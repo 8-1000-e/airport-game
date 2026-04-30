@@ -6,51 +6,46 @@ use crate::PrizeDistributed;
 
 /// Distribution:
 ///   - Top half = floor(player_count / 2) slots, equal shares of 95% of pot
-///   - Ties at the cutoff (same `score` as the entry at the cutoff) split
-///     the last slot
-///   - Treasury always gets 5% (100% if no winners)
-///
-/// Anti-scam: every wallet in `remaining_accounts` is verified against
-/// `leaderboard.entries[i].player` at the same index. The leaderboard itself
-/// is also verified to belong to this program (Anchor `Account<Leaderboard>`)
-/// and to be finalized (i.e. `finalize_leaderboard` has been called).
+///   - Ties at the cutoff split the last slot
+///   - Treasury gets 5% (or 8% for ≤2 players, 100% if no winners)
 pub fn distribute_prize(ctx: Context<DistributePrize>) -> Result<()> {
-    let lobby = &ctx.accounts.lobby;
+    // Read all the data we need from the zero-copy accounts up front.
+    let (player_count, lobby_id) = {
+        let lobby = ctx.accounts.lobby.load()?;
+        require!(lobby.status == STATUS_STARTED, LobbyError::LobbyNotStarted);
+        require_keys_eq!(
+            ctx.accounts.authority.key(),
+            lobby.authority,
+            LobbyError::Unauthorized
+        );
+        require_keys_eq!(
+            ctx.accounts.treasury.key(),
+            lobby.authority,
+            LobbyError::InvalidTreasury
+        );
+        (lobby.player_count, lobby.lobby_id)
+    };
 
-    require!(lobby.status == STATUS_STARTED, LobbyError::LobbyNotStarted);
-    require_keys_eq!(
-        ctx.accounts.authority.key(),
-        lobby.authority,
-        LobbyError::Unauthorized
+    let leaderboard = ctx.accounts.leaderboard.load()?;
+    require!(
+        leaderboard.finalized == 1,
+        LobbyError::LeaderboardNotFinalized
     );
-    require_keys_eq!(
-        ctx.accounts.treasury.key(),
-        lobby.authority,
-        LobbyError::InvalidTreasury
-    );
 
-    let leaderboard = &ctx.accounts.leaderboard;
-    require!(leaderboard.finalized, LobbyError::LeaderboardNotFinalized);
-
-    let player_count = lobby.player_count;
     let lb_count = leaderboard.entry_count as usize;
-    let lobby_id = lobby.lobby_id;
-
-    // Cutoff = top floor(player_count/2) — but we can't pay more winners
-    // than the leaderboard knows about (players who never picked don't have
-    // an entry).
     let desired_cutoff = player_count as usize / 2;
     let cutoff = desired_cutoff.min(lb_count);
 
     let total_pot = ctx.accounts.vault.total_pot;
 
-    // If no winners, treasury takes everything
+    // No winners → treasury takes all
     if cutoff == 0 {
+        drop(leaderboard);
         ctx.accounts.vault.sub_lamports(total_pot)?;
         ctx.accounts.treasury.add_lamports(total_pot)?;
         let vault_mut = &mut ctx.accounts.vault;
         vault_mut.total_pot = 0;
-        let lobby_mut = &mut ctx.accounts.lobby;
+        let mut lobby_mut = ctx.accounts.lobby.load_mut()?;
         lobby_mut.status = STATUS_SETTLED;
         emit!(PrizeDistributed {
             lobby_id,
@@ -63,15 +58,12 @@ pub fn distribute_prize(ctx: Context<DistributePrize>) -> Result<()> {
         return Ok(());
     }
 
-    // Dynamic fee: 2-player matches (1 winner) pay higher % to cover tx fees.
-    //   player_count <= 2 → 8%
-    //   player_count >= 3 → PLATFORM_FEE_BPS (5%)
     let fee_bps: u64 = if player_count <= 2 { 800 } else { PLATFORM_FEE_BPS };
     let treasury_cut = total_pot * fee_bps / 10_000;
     let winner_pool = total_pot - treasury_cut;
     let prize_per_slot = winner_pool / cutoff as u64;
 
-    // Detect tie at cutoff (same score as the last winning entry)
+    // Detect tie at cutoff (same score)
     let last_idx = cutoff - 1;
     let last_score = leaderboard.entries[last_idx].score;
 
@@ -90,7 +82,6 @@ pub fn distribute_prize(ctx: Context<DistributePrize>) -> Result<()> {
 
     let total_winners = cutoff - 1 + tied_count;
 
-    // Verify remaining_accounts match leaderboard.entries[i].player
     let rem = ctx.remaining_accounts;
     require!(rem.len() >= total_winners, LobbyError::NotEnoughAccounts);
     for i in 0..total_winners {
@@ -100,6 +91,7 @@ pub fn distribute_prize(ctx: Context<DistributePrize>) -> Result<()> {
             LobbyError::LeaderboardMismatch
         );
     }
+    drop(leaderboard); // release the read borrow before mutating lobby below
 
     let tied_prize = prize_per_slot / tied_count as u64;
 
@@ -127,8 +119,10 @@ pub fn distribute_prize(ctx: Context<DistributePrize>) -> Result<()> {
     let vault_mut = &mut ctx.accounts.vault;
     vault_mut.total_pot = vault_mut.total_pot.saturating_sub(paid);
 
-    let lobby_mut = &mut ctx.accounts.lobby;
-    lobby_mut.status = STATUS_SETTLED;
+    {
+        let mut lobby_mut = ctx.accounts.lobby.load_mut()?;
+        lobby_mut.status = STATUS_SETTLED;
+    }
 
     emit!(PrizeDistributed {
         lobby_id,
@@ -147,9 +141,9 @@ pub struct DistributePrize<'info> {
     #[account(
         mut,
         seeds = [LOBBY_SEED],
-        bump = lobby.bump,
+        bump = lobby.load()?.bump,
     )]
-    pub lobby: Account<'info, Lobby>,
+    pub lobby: AccountLoader<'info, Lobby>,
 
     #[account(
         mut,
@@ -160,9 +154,9 @@ pub struct DistributePrize<'info> {
 
     #[account(
         seeds = [LEADERBOARD_SEED, lobby.key().as_ref()],
-        bump = leaderboard.bump,
+        bump = leaderboard.load()?.bump,
     )]
-    pub leaderboard: Account<'info, Leaderboard>,
+    pub leaderboard: AccountLoader<'info, Leaderboard>,
 
     /// Must equal lobby.authority — guards against rake redirection.
     /// CHECK: key match enforced in handler.

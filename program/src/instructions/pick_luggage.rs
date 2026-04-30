@@ -15,38 +15,34 @@ pub fn pick_luggage(
     player: Pubkey,
     points: u64,
 ) -> Result<()> {
-    let lobby = &ctx.accounts.lobby;
-    require!(lobby.status == STATUS_STARTED, LobbyError::LobbyNotStarted);
-    require_keys_eq!(
-        ctx.accounts.authority.key(),
-        lobby.authority,
-        LobbyError::Unauthorized
-    );
+    {
+        let lobby = ctx.accounts.lobby.load()?;
+        require!(lobby.status == STATUS_STARTED, LobbyError::LobbyNotStarted);
+        require_keys_eq!(
+            ctx.accounts.authority.key(),
+            lobby.authority,
+            LobbyError::Unauthorized
+        );
 
-    // Reject picks past the match window
-    let now = Clock::get()?.unix_timestamp;
-    require!(
-        now < lobby.match_end_time,
-        LobbyError::MatchWindowExpired
-    );
+        let now = Clock::get()?.unix_timestamp;
+        require!(now < lobby.match_end_time, LobbyError::MatchWindowExpired);
 
-    // Player must have actually joined this lobby.
-    let players_in_lobby = &lobby.players[..lobby.player_count as usize];
-    require!(
-        players_in_lobby.iter().any(|p| p == &player),
-        LobbyError::EntryPlayerNotInLobby
-    );
+        let players_in_lobby = &lobby.players[..lobby.player_count as usize];
+        require!(
+            players_in_lobby.iter().any(|p| p == &player),
+            LobbyError::EntryPlayerNotInLobby
+        );
+    }
 
-    let leaderboard = &mut ctx.accounts.leaderboard;
+    let mut leaderboard = ctx.accounts.leaderboard.load_mut()?;
     require!(
-        !leaderboard.finalized,
+        leaderboard.finalized == 0,
         LobbyError::LeaderboardAlreadyFinalized
     );
 
     let count = leaderboard.entry_count as usize;
 
-    // Find existing entry (if any). The security check is: an existing
-    // entry with score != 0 means this player already picked.
+    // Security: an existing entry with score != 0 means already picked.
     let existing = leaderboard.entries[..count]
         .iter()
         .position(|e| e.player == player);
@@ -71,8 +67,7 @@ pub fn pick_luggage(
         }
     };
 
-    // Bubble up to maintain score DESC order. Score only ever grows on a
-    // successful pick, so we only need to move toward index 0.
+    // Bubble up to maintain score DESC order.
     while idx > 0 {
         let cur_score = leaderboard.entries[idx].score;
         let prev_score = leaderboard.entries[idx - 1].score;
@@ -91,16 +86,16 @@ pub fn pick_luggage(
 pub struct PickLuggage<'info> {
     #[account(
         seeds = [LOBBY_SEED],
-        bump = lobby.bump,
+        bump = lobby.load()?.bump,
     )]
-    pub lobby: Account<'info, Lobby>,
+    pub lobby: AccountLoader<'info, Lobby>,
 
     #[account(
         mut,
         seeds = [LEADERBOARD_SEED, lobby.key().as_ref()],
-        bump = leaderboard.bump,
+        bump = leaderboard.load()?.bump,
     )]
-    pub leaderboard: Account<'info, Leaderboard>,
+    pub leaderboard: AccountLoader<'info, Leaderboard>,
 
     pub authority: Signer<'info>,
 }

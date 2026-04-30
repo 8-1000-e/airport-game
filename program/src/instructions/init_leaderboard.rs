@@ -6,19 +6,23 @@ use crate::state::*;
 /// One-time bootstrap of the Leaderboard PDA. Called once after `create_lobby`.
 /// Subsequent matches reuse this same Leaderboard via `reset_leaderboard`.
 pub fn init_leaderboard(ctx: Context<InitLeaderboard>) -> Result<()> {
-    let lobby = &ctx.accounts.lobby;
-    require_keys_eq!(
-        ctx.accounts.authority.key(),
-        lobby.authority,
-        LobbyError::Unauthorized
-    );
+    let lobby_key = ctx.accounts.lobby.key();
+    {
+        let lobby = ctx.accounts.lobby.load()?;
+        require_keys_eq!(
+            ctx.accounts.authority.key(),
+            lobby.authority,
+            LobbyError::Unauthorized
+        );
+    }
 
-    let leaderboard = &mut ctx.accounts.leaderboard;
-    leaderboard.lobby = lobby.key();
-    leaderboard.finalized = false;
+    let mut leaderboard = ctx.accounts.leaderboard.load_init()?;
+    leaderboard.lobby = lobby_key;
+    leaderboard.finalized = 0;
     leaderboard.entry_count = 0;
-    leaderboard.entries = [LeaderboardEntry::default(); MAX_PLAYERS];
     leaderboard.bump = ctx.bumps.leaderboard;
+    leaderboard._padding = [0; 5];
+    leaderboard.entries = [LeaderboardEntry::default(); MAX_PLAYERS];
 
     Ok(())
 }
@@ -27,9 +31,9 @@ pub fn init_leaderboard(ctx: Context<InitLeaderboard>) -> Result<()> {
 pub struct InitLeaderboard<'info> {
     #[account(
         seeds = [LOBBY_SEED],
-        bump = lobby.bump,
+        bump = lobby.load()?.bump,
     )]
-    pub lobby: Account<'info, Lobby>,
+    pub lobby: AccountLoader<'info, Lobby>,
 
     #[account(
         init,
@@ -38,7 +42,7 @@ pub struct InitLeaderboard<'info> {
         seeds = [LEADERBOARD_SEED, lobby.key().as_ref()],
         bump,
     )]
-    pub leaderboard: Account<'info, Leaderboard>,
+    pub leaderboard: AccountLoader<'info, Leaderboard>,
 
     #[account(mut)]
     pub authority: Signer<'info>,

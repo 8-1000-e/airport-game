@@ -6,19 +6,26 @@ use crate::state::*;
 /// `close_lobby` wipe). Subsequent matches are run by calling `reset_lobby`
 /// instead — the same Lobby/Vault/Leaderboard PDAs are reused.
 pub fn create_lobby(ctx: Context<CreateLobby>, lobby_id: u64, entry_fee: u64) -> Result<()> {
-    let lobby = &mut ctx.accounts.lobby;
-    lobby.lobby_id = lobby_id;
-    lobby.authority = ctx.accounts.authority.key();
-    lobby.entry_fee = entry_fee;
-    lobby.player_count = 0;
-    lobby.players = [Pubkey::default(); MAX_PLAYERS];
-    lobby.status = STATUS_OPEN;
-    lobby.started_at = 0;
-    lobby.match_end_time = 0;
-    lobby.bump = ctx.bumps.lobby;
+    let lobby_key = ctx.accounts.lobby.key();
+    let authority_key = ctx.accounts.authority.key();
+    let lobby_bump = ctx.bumps.lobby;
+
+    {
+        let mut lobby = ctx.accounts.lobby.load_init()?;
+        lobby.lobby_id = lobby_id;
+        lobby.authority = authority_key;
+        lobby.entry_fee = entry_fee;
+        lobby.player_count = 0;
+        lobby.players = [Pubkey::default(); MAX_PLAYERS];
+        lobby.status = STATUS_OPEN;
+        lobby.started_at = 0;
+        lobby.match_end_time = 0;
+        lobby.bump = lobby_bump;
+        lobby._padding = [0; 5];
+    }
 
     let vault = &mut ctx.accounts.vault;
-    vault.lobby = ctx.accounts.lobby.key();
+    vault.lobby = lobby_key;
     vault.total_pot = 0;
     vault.bump = ctx.bumps.vault;
 
@@ -34,7 +41,7 @@ pub struct CreateLobby<'info> {
         seeds = [LOBBY_SEED],
         bump,
     )]
-    pub lobby: Account<'info, Lobby>,
+    pub lobby: AccountLoader<'info, Lobby>,
 
     #[account(
         init,

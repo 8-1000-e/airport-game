@@ -4,7 +4,7 @@ pub const VAULT_SEED: &[u8] = b"vault";
 pub const LEADERBOARD_SEED: &[u8] = b"leaderboard";
 
 // Caps
-pub const MAX_PLAYERS: usize = 50;
+pub const MAX_PLAYERS: usize = 110;
 
 // Platform rake, in basis points (100 bps = 1%)
 pub const PLATFORM_FEE_BPS: u64 = 500; // 5%

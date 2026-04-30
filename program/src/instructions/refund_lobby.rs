@@ -4,36 +4,36 @@ use crate::errors::*;
 use crate::state::*;
 
 /// Refund all players their entry fee from the vault. Called by the backend
-/// when a match launch fails after players have already paid. The lobby
-/// must NOT already be settled.
+/// when a match launch fails after players have already paid.
 ///
 /// remaining_accounts: player wallets in the same order as lobby.players[]
-/// (verified on-chain — anti-scam).
 pub fn refund_lobby(ctx: Context<RefundLobby>) -> Result<()> {
-    let lobby = &ctx.accounts.lobby;
+    let (count, entry_fee, players) = {
+        let lobby = ctx.accounts.lobby.load()?;
+        require!(lobby.status != STATUS_SETTLED, LobbyError::AlreadySettled);
+        require_keys_eq!(
+            ctx.accounts.authority.key(),
+            lobby.authority,
+            LobbyError::Unauthorized
+        );
+        (
+            lobby.player_count as usize,
+            lobby.entry_fee,
+            lobby.players,
+        )
+    };
 
-    require!(lobby.status != STATUS_SETTLED, LobbyError::AlreadySettled);
-    require_keys_eq!(
-        ctx.accounts.authority.key(),
-        lobby.authority,
-        LobbyError::Unauthorized
-    );
-
-    let count = lobby.player_count as usize;
-    let entry_fee = lobby.entry_fee;
     let rem = ctx.remaining_accounts;
     require!(rem.len() >= count, LobbyError::NotEnoughAccounts);
 
-    // Verify each remaining_account matches lobby.players[i]
     for i in 0..count {
         require_keys_eq!(
             rem[i].key(),
-            lobby.players[i],
+            players[i],
             LobbyError::LeaderboardMismatch
         );
     }
 
-    // Refund each player
     for i in 0..count {
         ctx.accounts.vault.sub_lamports(entry_fee)?;
         rem[i].add_lamports(entry_fee)?;
@@ -42,7 +42,7 @@ pub fn refund_lobby(ctx: Context<RefundLobby>) -> Result<()> {
     let vault_mut = &mut ctx.accounts.vault;
     vault_mut.total_pot = 0;
 
-    let lobby_mut = &mut ctx.accounts.lobby;
+    let mut lobby_mut = ctx.accounts.lobby.load_mut()?;
     lobby_mut.status = STATUS_SETTLED;
 
     Ok(())
@@ -53,9 +53,9 @@ pub struct RefundLobby<'info> {
     #[account(
         mut,
         seeds = [LOBBY_SEED],
-        bump = lobby.bump,
+        bump = lobby.load()?.bump,
     )]
-    pub lobby: Account<'info, Lobby>,
+    pub lobby: AccountLoader<'info, Lobby>,
 
     #[account(
         mut,

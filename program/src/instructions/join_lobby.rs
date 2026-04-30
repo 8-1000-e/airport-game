@@ -5,16 +5,22 @@ use crate::errors::*;
 use crate::state::*;
 
 pub fn join_lobby(ctx: Context<JoinLobby>) -> Result<()> {
-    let lobby = &mut ctx.accounts.lobby;
-
-    require!(lobby.status == STATUS_OPEN, LobbyError::LobbyNotOpen);
-    require!((lobby.player_count as usize) < MAX_PLAYERS, LobbyError::LobbyFull);
-
     let player_key = ctx.accounts.player.key();
-    let already_in = lobby.players[..lobby.player_count as usize]
-        .iter()
-        .any(|p| p == &player_key);
-    require!(!already_in, LobbyError::AlreadyJoined);
+
+    // Read the entry fee + validation, then drop the borrow before the CPI.
+    let entry_fee = {
+        let lobby = ctx.accounts.lobby.load()?;
+        require!(lobby.status == STATUS_OPEN, LobbyError::LobbyNotOpen);
+        require!(
+            (lobby.player_count as usize) < MAX_PLAYERS,
+            LobbyError::LobbyFull
+        );
+        let already_in = lobby.players[..lobby.player_count as usize]
+            .iter()
+            .any(|p| p == &player_key);
+        require!(!already_in, LobbyError::AlreadyJoined);
+        lobby.entry_fee
+    };
 
     // 1. Transfer entry fee player → vault (CPI to SystemProgram)
     let cpi_ctx = CpiContext::new(
@@ -24,18 +30,21 @@ pub fn join_lobby(ctx: Context<JoinLobby>) -> Result<()> {
             to: ctx.accounts.vault.to_account_info(),
         },
     );
-    system_program::transfer(cpi_ctx, lobby.entry_fee)?;
+    system_program::transfer(cpi_ctx, entry_fee)?;
 
     // 2. Register player on-chain
-    let idx = lobby.player_count as usize;
-    lobby.players[idx] = player_key;
-    lobby.player_count += 1;
+    {
+        let mut lobby = ctx.accounts.lobby.load_mut()?;
+        let idx = lobby.player_count as usize;
+        lobby.players[idx] = player_key;
+        lobby.player_count += 1;
+    }
 
     // 3. Update vault bookkeeping
     let vault = &mut ctx.accounts.vault;
     vault.total_pot = vault
         .total_pot
-        .checked_add(lobby.entry_fee)
+        .checked_add(entry_fee)
         .ok_or(LobbyError::VaultUnderflow)?;
 
     Ok(())
@@ -46,9 +55,9 @@ pub struct JoinLobby<'info> {
     #[account(
         mut,
         seeds = [LOBBY_SEED],
-        bump = lobby.bump,
+        bump = lobby.load()?.bump,
     )]
-    pub lobby: Account<'info, Lobby>,
+    pub lobby: AccountLoader<'info, Lobby>,
 
     #[account(
         mut,
