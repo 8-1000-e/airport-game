@@ -25,7 +25,7 @@ pub fn start_match(ctx: Context<StartMatch>) -> Result<()> {
 pub struct StartMatch<'info> {
     #[account(
         mut,
-        seeds = [LOBBY_SEED],
+        seeds = [LOBBY_SEED, authority.key().as_ref()],
         bump = lobby.load()?.bump,
     )]
     pub lobby: AccountLoader<'info, Lobby>,

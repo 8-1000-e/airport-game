@@ -51,7 +51,7 @@ pub fn reset_lobby(
 pub struct ResetLobby<'info> {
     #[account(
         mut,
-        seeds = [LOBBY_SEED],
+        seeds = [LOBBY_SEED, authority.key().as_ref()],
         bump = lobby.load()?.bump,
     )]
     pub lobby: AccountLoader<'info, Lobby>,

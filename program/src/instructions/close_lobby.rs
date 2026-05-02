@@ -46,7 +46,7 @@ pub fn close_lobby(ctx: Context<CloseLobby>) -> Result<()> {
 pub struct CloseLobby<'info> {
     #[account(
         mut,
-        seeds = [LOBBY_SEED],
+        seeds = [LOBBY_SEED, authority.key().as_ref()],
         bump,
         close = authority,
     )]

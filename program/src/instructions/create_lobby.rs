@@ -38,7 +38,7 @@ pub struct CreateLobby<'info> {
         init,
         payer = authority,
         space = Lobby::LEN,
-        seeds = [LOBBY_SEED],
+        seeds = [LOBBY_SEED, authority.key().as_ref()],
         bump,
     )]
     pub lobby: AccountLoader<'info, Lobby>,

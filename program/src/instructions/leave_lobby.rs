@@ -55,7 +55,7 @@ pub fn leave_lobby(ctx: Context<LeaveLobby>, player: Pubkey) -> Result<()> {
 pub struct LeaveLobby<'info> {
     #[account(
         mut,
-        seeds = [LOBBY_SEED],
+        seeds = [LOBBY_SEED, authority.key().as_ref()],
         bump = lobby.load()?.bump,
     )]
     pub lobby: AccountLoader<'info, Lobby>,

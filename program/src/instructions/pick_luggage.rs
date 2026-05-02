@@ -89,7 +89,7 @@ pub fn pick_luggage(
 #[derive(Accounts)]
 pub struct PickLuggage<'info> {
     #[account(
-        seeds = [LOBBY_SEED],
+        seeds = [LOBBY_SEED, authority.key().as_ref()],
         bump = lobby.load()?.bump,
     )]
     pub lobby: AccountLoader<'info, Lobby>,

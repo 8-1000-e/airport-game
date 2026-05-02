@@ -28,7 +28,7 @@ pub fn finalize_leaderboard(ctx: Context<FinalizeLeaderboard>) -> Result<()> {
 #[derive(Accounts)]
 pub struct FinalizeLeaderboard<'info> {
     #[account(
-        seeds = [LOBBY_SEED],
+        seeds = [LOBBY_SEED, authority.key().as_ref()],
         bump = lobby.load()?.bump,
     )]
     pub lobby: AccountLoader<'info, Lobby>,

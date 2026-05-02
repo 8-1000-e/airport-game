@@ -54,7 +54,7 @@ pub fn join_lobby(ctx: Context<JoinLobby>) -> Result<()> {
 pub struct JoinLobby<'info> {
     #[account(
         mut,
-        seeds = [LOBBY_SEED],
+        seeds = [LOBBY_SEED, authority.key().as_ref()],
         bump = lobby.load()?.bump,
     )]
     pub lobby: AccountLoader<'info, Lobby>,
@@ -69,6 +69,13 @@ pub struct JoinLobby<'info> {
     /// The player joining — signs to authorize the entry_fee transfer.
     #[account(mut)]
     pub player: Signer<'info>,
+
+    /// Lobby authority (= the back instance's server keypair). Unchecked
+    /// here — the `seeds` constraint on `lobby` forces the right value:
+    /// pass the wrong key and Anchor's PDA check fails because the derived
+    /// address won't match. Required only to derive the per-back lobby PDA.
+    /// CHECK: Constrained transitively by the lobby's seeds verification.
+    pub authority: UncheckedAccount<'info>,
 
     pub system_program: Program<'info, System>,
 }

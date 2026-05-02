@@ -52,7 +52,7 @@ pub fn refund_lobby(ctx: Context<RefundLobby>) -> Result<()> {
 pub struct RefundLobby<'info> {
     #[account(
         mut,
-        seeds = [LOBBY_SEED],
+        seeds = [LOBBY_SEED, authority.key().as_ref()],
         bump = lobby.load()?.bump,
     )]
     pub lobby: AccountLoader<'info, Lobby>,

@@ -140,7 +140,7 @@ pub fn distribute_prize(ctx: Context<DistributePrize>) -> Result<()> {
 pub struct DistributePrize<'info> {
     #[account(
         mut,
-        seeds = [LOBBY_SEED],
+        seeds = [LOBBY_SEED, authority.key().as_ref()],
         bump = lobby.load()?.bump,
     )]
     pub lobby: AccountLoader<'info, Lobby>,

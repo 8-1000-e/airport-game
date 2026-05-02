@@ -30,7 +30,7 @@ pub fn init_leaderboard(ctx: Context<InitLeaderboard>) -> Result<()> {
 #[derive(Accounts)]
 pub struct InitLeaderboard<'info> {
     #[account(
-        seeds = [LOBBY_SEED],
+        seeds = [LOBBY_SEED, authority.key().as_ref()],
         bump = lobby.load()?.bump,
     )]
     pub lobby: AccountLoader<'info, Lobby>,

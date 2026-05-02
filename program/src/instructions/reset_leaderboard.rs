@@ -28,7 +28,7 @@ pub fn reset_leaderboard(ctx: Context<ResetLeaderboard>) -> Result<()> {
 #[derive(Accounts)]
 pub struct ResetLeaderboard<'info> {
     #[account(
-        seeds = [LOBBY_SEED],
+        seeds = [LOBBY_SEED, authority.key().as_ref()],
         bump = lobby.load()?.bump,
     )]
     pub lobby: AccountLoader<'info, Lobby>,
