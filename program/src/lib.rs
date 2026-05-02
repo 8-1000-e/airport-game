@@ -10,7 +10,7 @@ pub use state::LeaderboardEntry;
 
 // Placeholder — gets replaced by `anchor keys sync` once the program
 // keypair is generated under target/deploy/.
-declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
+declare_id!("DSxQtZoKFeF7xzpcSCTNgxocf8kazFEtvT2iC5GY3iMk");
 
 #[event]
 pub struct PrizeDistributed {

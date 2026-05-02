@@ -4,9 +4,9 @@ use crate::errors::*;
 use crate::state::*;
 
 /// Backend records that `player` just picked a luggage worth `points` points.
-/// One pick per player per match — the security check is "score must be 0
-/// before this call". A second call from the same player therefore rejects
-/// with `AlreadyPicked`.
+/// Up to `MAX_PICKS_PER_PLAYER` picks per player per match — score is
+/// cumulative (sum of all picks). A call beyond the cap rejects with
+/// `MaxPicksReached`.
 ///
 /// Picks are also rejected past `lobby.match_end_time`, even if the backend
 /// hasn't called `finalize_leaderboard` yet.
@@ -42,7 +42,6 @@ pub fn pick_luggage(
 
     let count = leaderboard.entry_count as usize;
 
-    // Security: an existing entry with score != 0 means already picked.
     let existing = leaderboard.entries[..count]
         .iter()
         .position(|e| e.player == player);
@@ -50,10 +49,13 @@ pub fn pick_luggage(
     let mut idx = match existing {
         Some(i) => {
             require!(
-                leaderboard.entries[i].score == 0,
-                LobbyError::AlreadyPicked
+                leaderboard.entries[i].pick_count < MAX_PICKS_PER_PLAYER,
+                LobbyError::MaxPicksReached
             );
-            leaderboard.entries[i].score = points;
+            leaderboard.entries[i].score = leaderboard.entries[i]
+                .score
+                .saturating_add(points);
+            leaderboard.entries[i].pick_count += 1;
             i
         }
         None => {
@@ -61,6 +63,8 @@ pub fn pick_luggage(
             leaderboard.entries[count] = LeaderboardEntry {
                 player,
                 score: points,
+                pick_count: 1,
+                _padding: [0; 7],
             };
             leaderboard.entry_count += 1;
             count

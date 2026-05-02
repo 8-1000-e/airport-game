@@ -20,4 +20,8 @@ pub const STATUS_SETTLED: u8 = 2;
 // Hard time window after `start_match` during which `pick_luggage` is
 // accepted. Late picks are rejected on-chain even if the backend's clock
 // drifts.
-pub const MATCH_DURATION_SECS: i64 = 60;
+pub const MATCH_DURATION_SECS: i64 = 90;
+
+/// Max number of `pick_luggage` calls accepted per player per match.
+/// Score is cumulative — the leaderboard entry sums all picks.
+pub const MAX_PICKS_PER_PLAYER: u8 = 3;

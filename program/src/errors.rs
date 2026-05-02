@@ -34,8 +34,8 @@ pub enum LobbyError {
     VaultUnderflow,
     #[msg("Player is not in this lobby")]
     NotInLobby,
-    #[msg("Player has already picked a luggage in this match")]
-    AlreadyPicked,
+    #[msg("Player has reached the per-match pick cap")]
+    MaxPicksReached,
     #[msg("Cannot leave: another player is already in the lobby")]
     CannotLeaveWithOthers,
     #[msg("Match window has expired — picks are no longer accepted")]

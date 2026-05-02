@@ -48,14 +48,18 @@ impl Vault {
 #[derive(Default)]
 pub struct LeaderboardEntry {
     pub player: Pubkey,
-    /// Score from the player's single pick this match. `score == 0` means
-    /// the player hasn't picked yet.
+    /// Cumulative score across all picks this match.
     pub score: u64,
+    /// Number of `pick_luggage` calls accepted for this player so far.
+    /// Used to enforce `MAX_PICKS_PER_PLAYER`.
+    pub pick_count: u8,
+    /// Pad to 8-byte alignment (next field is u64-aligned in the array).
+    pub _padding: [u8; 7],
 }
 
 impl LeaderboardEntry {
-    /// 32 (player) + 8 (score) = 40.
-    pub const SIZE: usize = 32 + 8;
+    /// 32 (player) + 8 (score) + 1 (pick_count) + 7 (pad) = 48.
+    pub const SIZE: usize = 32 + 8 + 1 + 7;
 }
 
 /// Per-lobby leaderboard. Seeds: ["leaderboard", lobby.key()].

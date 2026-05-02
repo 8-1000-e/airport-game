@@ -193,7 +193,7 @@ interface Luggage {
   t: number;
   speed: number;
   color: string;
-  multiplier: number;
+  points: number;
   size: number;
   type: BagType;
 }
@@ -203,12 +203,12 @@ const luggage: Luggage[] = [];
 // don't keep cycling on the carousel but remain visible in the box.
 const boxedLuggage: Luggage[] = [];
 const COUNT = 18;
-const MULTIPLIERS = [
-  0.6, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.5, 1.7,
-  1.8, 2.0, 2.2, 2.5, 2.7, 3.0, 3.2, 3.5, 4.0,
+const BAG_POINTS = [
+  60, 80, 90, 100, 110, 120, 130, 150, 170,
+  180, 200, 220, 250, 270, 300, 320, 350, 400,
 ];
 // Threshold for "main subject" treatment — top 3 values get extra FX
-const TOP3_THRESHOLD = [...MULTIPLIERS].sort((a, b) => b - a)[2];
+const TOP3_THRESHOLD = [...BAG_POINTS].sort((a, b) => b - a)[2];
 const TYPES: BagType[] = ["hard", "duffle", "backpack", "briefcase"];
 
 for (let i = 0; i < COUNT; i++) {
@@ -216,7 +216,7 @@ for (let i = 0; i < COUNT; i++) {
     t: i / COUNT,
     speed: 0.04,
     color: LUGGAGE_COLORS[i % LUGGAGE_COLORS.length],
-    multiplier: MULTIPLIERS[i % MULTIPLIERS.length],
+    points: BAG_POINTS[i % BAG_POINTS.length],
     size: 60,
     type: TYPES[i % TYPES.length],
   });
@@ -507,8 +507,8 @@ function drawLuggage(lug: Luggage, cx: number, cy: number) {
 
   // Points label — placed along the OUTWARD NORMAL of the path so it follows
   // luggage cleanly through the curves.
-  const points = Math.round(lug.multiplier * 100);
-  const isTop3 = lug.multiplier >= TOP3_THRESHOLD;
+  const points = lug.points;
+  const isTop3 = lug.points >= TOP3_THRESHOLD;
   const nx = Math.sin(angle);
   const ny = -Math.cos(angle);
   const labelOffset = TRACK.trackWidth * 0.55 + 22;
@@ -572,7 +572,7 @@ const DIR_LERP_PER_SEC = 3.5;
 // Ignore micro price moves. Below this fraction of price the change is treated
 // as noise — neither charging nor discharging happens, and lastObservedPrice
 // is NOT updated, so accumulated micro-moves can still cross the threshold.
-const NOISE_FLOOR_RATIO = 0.00000005; // ~0.00005% of price — basically any non-zero tick triggers
+const NOISE_FLOOR_RATIO = 0.0000030; // ~0.00005% of price — basically any non-zero tick triggers
 
 function isAnyFlashing(now: number): boolean {
   return (
