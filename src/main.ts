@@ -572,7 +572,7 @@ const DIR_LERP_PER_SEC = 3.5;
 // Ignore micro price moves. Below this fraction of price the change is treated
 // as noise — neither charging nor discharging happens, and lastObservedPrice
 // is NOT updated, so accumulated micro-moves can still cross the threshold.
-const NOISE_FLOOR_RATIO = 0.0000030; // ~0.00005% of price — basically any non-zero tick triggers
+const NOISE_FLOOR_RATIO = 0.0000015; // ~0.00005% of price — basically any non-zero tick triggers
 
 function isAnyFlashing(now: number): boolean {
   return (
