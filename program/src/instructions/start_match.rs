@@ -3,7 +3,7 @@ use crate::constants::*;
 use crate::errors::*;
 use crate::state::*;
 
-pub fn start_match(ctx: Context<StartMatch>) -> Result<()> {
+pub fn start_match(ctx: Context<StartMatch>, _lobby_id: u64) -> Result<()> {
     let mut lobby = ctx.accounts.lobby.load_mut()?;
 
     require!(lobby.status == STATUS_OPEN, LobbyError::LobbyNotOpen);
@@ -22,10 +22,11 @@ pub fn start_match(ctx: Context<StartMatch>) -> Result<()> {
 }
 
 #[derive(Accounts)]
+#[instruction(lobby_id: u64)]
 pub struct StartMatch<'info> {
     #[account(
         mut,
-        seeds = [LOBBY_SEED, authority.key().as_ref()],
+        seeds = [LOBBY_SEED, lobby_id.to_le_bytes().as_ref()],
         bump = lobby.load()?.bump,
     )]
     pub lobby: AccountLoader<'info, Lobby>,

@@ -5,7 +5,7 @@ use crate::state::*;
 
 /// One-time bootstrap of the Leaderboard PDA. Called once after `create_lobby`.
 /// Subsequent matches reuse this same Leaderboard via `reset_leaderboard`.
-pub fn init_leaderboard(ctx: Context<InitLeaderboard>) -> Result<()> {
+pub fn init_leaderboard(ctx: Context<InitLeaderboard>, _lobby_id: u64) -> Result<()> {
     let lobby_key = ctx.accounts.lobby.key();
     {
         let lobby = ctx.accounts.lobby.load()?;
@@ -28,9 +28,10 @@ pub fn init_leaderboard(ctx: Context<InitLeaderboard>) -> Result<()> {
 }
 
 #[derive(Accounts)]
+#[instruction(lobby_id: u64)]
 pub struct InitLeaderboard<'info> {
     #[account(
-        seeds = [LOBBY_SEED, authority.key().as_ref()],
+        seeds = [LOBBY_SEED, lobby_id.to_le_bytes().as_ref()],
         bump = lobby.load()?.bump,
     )]
     pub lobby: AccountLoader<'info, Lobby>,

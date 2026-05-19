@@ -13,7 +13,7 @@ use crate::state::*;
 /// rather than read from account data — so the leaderboard is never
 /// deserialized, which is critical when its on-chain size predates the
 /// current Leaderboard layout (would otherwise fail `load()`).
-pub fn close_lobby(ctx: Context<CloseLobby>) -> Result<()> {
+pub fn close_lobby(ctx: Context<CloseLobby>, _lobby_id: u64) -> Result<()> {
     {
         let lobby = ctx.accounts.lobby.load()?;
         require_keys_eq!(
@@ -43,10 +43,11 @@ pub fn close_lobby(ctx: Context<CloseLobby>) -> Result<()> {
 }
 
 #[derive(Accounts)]
+#[instruction(lobby_id: u64)]
 pub struct CloseLobby<'info> {
     #[account(
         mut,
-        seeds = [LOBBY_SEED, authority.key().as_ref()],
+        seeds = [LOBBY_SEED, lobby_id.to_le_bytes().as_ref()],
         bump,
         close = authority,
     )]

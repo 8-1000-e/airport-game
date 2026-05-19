@@ -4,7 +4,7 @@ use crate::constants::*;
 use crate::errors::*;
 use crate::state::*;
 
-pub fn join_lobby(ctx: Context<JoinLobby>) -> Result<()> {
+pub fn join_lobby(ctx: Context<JoinLobby>, _lobby_id: u64) -> Result<()> {
     let player_key = ctx.accounts.player.key();
 
     // Read the entry fee + validation, then drop the borrow before the CPI.
@@ -51,10 +51,11 @@ pub fn join_lobby(ctx: Context<JoinLobby>) -> Result<()> {
 }
 
 #[derive(Accounts)]
+#[instruction(lobby_id: u64)]
 pub struct JoinLobby<'info> {
     #[account(
         mut,
-        seeds = [LOBBY_SEED, authority.key().as_ref()],
+        seeds = [LOBBY_SEED, lobby_id.to_le_bytes().as_ref()],
         bump = lobby.load()?.bump,
     )]
     pub lobby: AccountLoader<'info, Lobby>,

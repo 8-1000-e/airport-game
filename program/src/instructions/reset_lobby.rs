@@ -7,6 +7,7 @@ use crate::state::*;
 /// dust to the authority before zeroing `total_pot`.
 pub fn reset_lobby(
     ctx: Context<ResetLobby>,
+    _lobby_id: u64,
     new_lobby_id: u64,
     new_entry_fee: u64,
 ) -> Result<()> {
@@ -48,10 +49,11 @@ pub fn reset_lobby(
 }
 
 #[derive(Accounts)]
+#[instruction(lobby_id: u64)]
 pub struct ResetLobby<'info> {
     #[account(
         mut,
-        seeds = [LOBBY_SEED, authority.key().as_ref()],
+        seeds = [LOBBY_SEED, lobby_id.to_le_bytes().as_ref()],
         bump = lobby.load()?.bump,
     )]
     pub lobby: AccountLoader<'info, Lobby>,

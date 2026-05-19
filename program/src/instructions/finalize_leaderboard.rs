@@ -4,7 +4,10 @@ use crate::errors::*;
 use crate::state::*;
 
 /// Mark the leaderboard as final so `distribute_prize` can run.
-pub fn finalize_leaderboard(ctx: Context<FinalizeLeaderboard>) -> Result<()> {
+pub fn finalize_leaderboard(
+    ctx: Context<FinalizeLeaderboard>,
+    _lobby_id: u64,
+) -> Result<()> {
     {
         let lobby = ctx.accounts.lobby.load()?;
         require!(lobby.status == STATUS_STARTED, LobbyError::LobbyNotStarted);
@@ -26,9 +29,10 @@ pub fn finalize_leaderboard(ctx: Context<FinalizeLeaderboard>) -> Result<()> {
 }
 
 #[derive(Accounts)]
+#[instruction(lobby_id: u64)]
 pub struct FinalizeLeaderboard<'info> {
     #[account(
-        seeds = [LOBBY_SEED, authority.key().as_ref()],
+        seeds = [LOBBY_SEED, lobby_id.to_le_bytes().as_ref()],
         bump = lobby.load()?.bump,
     )]
     pub lobby: AccountLoader<'info, Lobby>,

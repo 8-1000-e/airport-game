@@ -6,7 +6,7 @@ use crate::state::*;
 /// Reset the leaderboard so it can be reused for the next match. Must be
 /// called between matches (after the previous distribute_prize and before
 /// the next batch of pick_luggage calls).
-pub fn reset_leaderboard(ctx: Context<ResetLeaderboard>) -> Result<()> {
+pub fn reset_leaderboard(ctx: Context<ResetLeaderboard>, _lobby_id: u64) -> Result<()> {
     {
         let lobby = ctx.accounts.lobby.load()?;
         require!(lobby.status != STATUS_STARTED, LobbyError::LobbyNotSettled);
@@ -26,9 +26,10 @@ pub fn reset_leaderboard(ctx: Context<ResetLeaderboard>) -> Result<()> {
 }
 
 #[derive(Accounts)]
+#[instruction(lobby_id: u64)]
 pub struct ResetLeaderboard<'info> {
     #[account(
-        seeds = [LOBBY_SEED, authority.key().as_ref()],
+        seeds = [LOBBY_SEED, lobby_id.to_le_bytes().as_ref()],
         bump = lobby.load()?.bump,
     )]
     pub lobby: AccountLoader<'info, Lobby>,

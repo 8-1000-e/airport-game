@@ -7,7 +7,7 @@ use crate::state::*;
 /// when a match launch fails after players have already paid.
 ///
 /// remaining_accounts: player wallets in the same order as lobby.players[]
-pub fn refund_lobby(ctx: Context<RefundLobby>) -> Result<()> {
+pub fn refund_lobby(ctx: Context<RefundLobby>, _lobby_id: u64) -> Result<()> {
     let (count, entry_fee, players) = {
         let lobby = ctx.accounts.lobby.load()?;
         require!(lobby.status != STATUS_SETTLED, LobbyError::AlreadySettled);
@@ -49,10 +49,11 @@ pub fn refund_lobby(ctx: Context<RefundLobby>) -> Result<()> {
 }
 
 #[derive(Accounts)]
+#[instruction(lobby_id: u64)]
 pub struct RefundLobby<'info> {
     #[account(
         mut,
-        seeds = [LOBBY_SEED, authority.key().as_ref()],
+        seeds = [LOBBY_SEED, lobby_id.to_le_bytes().as_ref()],
         bump = lobby.load()?.bump,
     )]
     pub lobby: AccountLoader<'info, Lobby>,

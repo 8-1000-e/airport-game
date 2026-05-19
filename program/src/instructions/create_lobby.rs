@@ -33,12 +33,13 @@ pub fn create_lobby(ctx: Context<CreateLobby>, lobby_id: u64, entry_fee: u64) ->
 }
 
 #[derive(Accounts)]
+#[instruction(lobby_id: u64)]
 pub struct CreateLobby<'info> {
     #[account(
         init,
         payer = authority,
         space = Lobby::LEN,
-        seeds = [LOBBY_SEED, authority.key().as_ref()],
+        seeds = [LOBBY_SEED, lobby_id.to_le_bytes().as_ref()],
         bump,
     )]
     pub lobby: AccountLoader<'info, Lobby>,

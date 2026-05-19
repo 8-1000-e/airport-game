@@ -8,7 +8,7 @@ use crate::PrizeDistributed;
 ///   - Top half = floor(player_count / 2) slots, equal shares of 95% of pot
 ///   - Ties at the cutoff split the last slot
 ///   - Treasury gets 5% (or 8% for ≤2 players, 100% if no winners)
-pub fn distribute_prize(ctx: Context<DistributePrize>) -> Result<()> {
+pub fn distribute_prize(ctx: Context<DistributePrize>, _lobby_id: u64) -> Result<()> {
     // Read all the data we need from the zero-copy accounts up front.
     let (player_count, lobby_id) = {
         let lobby = ctx.accounts.lobby.load()?;
@@ -137,10 +137,11 @@ pub fn distribute_prize(ctx: Context<DistributePrize>) -> Result<()> {
 }
 
 #[derive(Accounts)]
+#[instruction(lobby_id: u64)]
 pub struct DistributePrize<'info> {
     #[account(
         mut,
-        seeds = [LOBBY_SEED, authority.key().as_ref()],
+        seeds = [LOBBY_SEED, lobby_id.to_le_bytes().as_ref()],
         bump = lobby.load()?.bump,
     )]
     pub lobby: AccountLoader<'info, Lobby>,

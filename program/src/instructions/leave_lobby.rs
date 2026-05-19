@@ -8,7 +8,7 @@ use crate::state::*;
 /// server-side). Only allowed when player is alone in the lobby.
 ///
 /// remaining_accounts[0] = player wallet (writable, receives refund)
-pub fn leave_lobby(ctx: Context<LeaveLobby>, player: Pubkey) -> Result<()> {
+pub fn leave_lobby(ctx: Context<LeaveLobby>, _lobby_id: u64, player: Pubkey) -> Result<()> {
     let entry_fee = {
         let lobby = ctx.accounts.lobby.load()?;
         require!(lobby.status == STATUS_OPEN, LobbyError::LobbyNotOpen);
@@ -52,10 +52,11 @@ pub fn leave_lobby(ctx: Context<LeaveLobby>, player: Pubkey) -> Result<()> {
 }
 
 #[derive(Accounts)]
+#[instruction(lobby_id: u64)]
 pub struct LeaveLobby<'info> {
     #[account(
         mut,
-        seeds = [LOBBY_SEED, authority.key().as_ref()],
+        seeds = [LOBBY_SEED, lobby_id.to_le_bytes().as_ref()],
         bump = lobby.load()?.bump,
     )]
     pub lobby: AccountLoader<'info, Lobby>,

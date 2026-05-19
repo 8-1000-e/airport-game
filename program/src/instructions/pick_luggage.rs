@@ -12,6 +12,7 @@ use crate::state::*;
 /// hasn't called `finalize_leaderboard` yet.
 pub fn pick_luggage(
     ctx: Context<PickLuggage>,
+    _lobby_id: u64,
     player: Pubkey,
     points: u64,
 ) -> Result<()> {
@@ -87,9 +88,10 @@ pub fn pick_luggage(
 }
 
 #[derive(Accounts)]
+#[instruction(lobby_id: u64)]
 pub struct PickLuggage<'info> {
     #[account(
-        seeds = [LOBBY_SEED, authority.key().as_ref()],
+        seeds = [LOBBY_SEED, lobby_id.to_le_bytes().as_ref()],
         bump = lobby.load()?.bump,
     )]
     pub lobby: AccountLoader<'info, Lobby>,
